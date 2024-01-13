@@ -1,11 +1,15 @@
 # IDE
 .idea
-venv
+.venv
 __pycache__
 
-# Custom directories
+# Directories
+.debug
 inputs
 outputs
 
-# Custom extensions/files
-*.bat
+# Files
+# ...
+
+# Extensions
+# ...
