@@ -1,9 +1,9 @@
 import os
-import subprocess
+import sys
 import time
 import pathlib
-import sys
 import argparse
+import subprocess
 
 
 parser = argparse.ArgumentParser(description='MassVideoRenderer')
@@ -78,7 +78,7 @@ class settings:
     }
 
     class end_action:
-        mode = 'suspend'  # The action when finished should be: 'shutdown', 'restart' or 'suspend' [str]
+        mode = None  # The action when finished should be: 'shutdown', 'restart' or 'suspend' [str]
         custom_command = None  # Custom Windows bash command to be executed when finished (this will override 'mode' option) [str]
         time = 30  # Intentional delay (seconds) before executing final action (if enabled) [int = 60]
 
