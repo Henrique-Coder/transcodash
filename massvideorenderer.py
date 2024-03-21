@@ -7,7 +7,7 @@ import subprocess
 
 
 parser = argparse.ArgumentParser(description='MassVideoRenderer')
-parser.add_argument('-v',  '--version',                        action='version', version='MassVideoRenderer v1.0.0')
+parser.add_argument('-v',  '--version',                        action='version', version='MassVideoRenderer 0.0.1')
 parser.add_argument('-i',  '--input',                          metavar='input',            type=str, required=True,  help='Input directory',)
 parser.add_argument('-o',  '--output',                         metavar='output',           type=str, required=True,  help='Output directory')
 parser.add_argument('-ie', '--input-extensions', default=None, metavar='input_extensions', type=str, required=False, help='Input files extensions (separated by comma)')
@@ -20,31 +20,31 @@ for k, v in args.__dict__.items():
 
 
 class settings:
-    class general:
+    class general:  # Auto-generated settings (do not modify)
         input_type = 'file' if pathlib.Path.is_file(pathlib.Path(args.input)) else 'directory'  # Input type: 'file' or 'directory' [str]
         input = args.input  # Input directory or file [str]
         output = args.output  # Output directory [str]
         input_extensions = None if not args.input_extensions else args.input_extensions.split(',')  # Allowed extensions to be rendered [list]
         output_extension = args.output_extension  # Output files extension [str]
 
-    class ffmpeg_settings:
+    class ffmpeg_settings:  # FFmpeg's settings (modify if necessary)
         replace_existing_file = True  # Replace existing output file [bool = True]
-        intentional_delay_between_encodings = 15  # Intentional delay (seconds) between encodings [int = 15]
+        intentional_delay_between_encodings = 5  # Intentional delay (seconds) between encodings [int = 15]
         hide_ffmpeg_banner = True  # Hide FFmpeg banner [bool = True]
         show_extra_ffmpeg_debug_info = True  # Show extra FFmpeg debug info [bool = True]
         ffmpeg_log_level_debug = 'warning'  # FFmpeg log level debug [str = 'warning']
 
     ffmpeg_render_args = {
-        'hwaccel': None,  # Hardware acceleration API [str = None] -> 'cuda', 'd3d11va', 'opencl', ...
+        'hwaccel': None,  # Hardware acceleration API [str = None] -> 'cuda', 'd3d11va', 'opencl', 'vaapi'
         'hwaccel_device': None,  # Hardware acceleration device (GPU) ID [int = None] -> 0, 1, 2, ...
         'c:v': 'libsvtav1',  # Video codec [str] -> 'libsvtav1', 'libx264', 'libx265', ...
-        'minrate:v': None,  # Minimum video bit rate [str] -> '1m', '2m', '3m', ...
-        'maxrate:v': None,  # Maximum video bit rate [str] -> '1m', '2m', '3m', ...
+        'minrate:v': '1m',  # Minimum video bit rate [str] -> '1m', '2m', '3m', ...
+        'maxrate:v': '8m',  # Maximum video bit rate [str] -> '1m', '2m', '3m', ...
         'quality': 'high',  # Quality preset [str] -> 'high', 'medium', 'low', ...
         'level': 4.0,  # Level [float] -> 1.0, 2.0, 3.0, 4.0, 5.0, ...
         'b:v': 0,  # Video bit rate [int] (0 = VBR)
         'tune': 0,  # Tune preset [str]
-        'framerate': '60',  # Frame rate [str]
+        'framerate': None,  # Frame rate [str] https://github.com/Henrique-Coder/CodeFormer https://github.com/Henrique-Coder/CodeFormer
         'threads': 0,  # Number of threads [int = 0]
         'tile_columns': 2,  # Number of tile columns [int] -> tile_columns * tile_rows = YOUR_CPU_CORES
         'tile_rows': 4,  # Number of tile rows [int] -> tile_rows * tile_columns = YOUR_CPU_CORES
@@ -53,14 +53,14 @@ class settings:
         'b_strategy': 1,  # B-frames strategy [int] -> 0, 1, 2, 3, ...
         'bf': 0,  # Number of B-frames [int] -> 1, 2, 3, ...
         'c:a': 'libopus',  # Audio codec [str]
-        'b:a': '192k',  # Audio bit rate [str]
+        'b:a': '128k',  # Audio bit rate [str] -> '64k', '128k', '256k', ...
         'ar': '48000',  # Audio sample rate [str]
         'c:s': 'webvtt',  # Subtitle codec [str]
         'pix_fmt': 'yuv420p',  # Pixel format [str] -> 'yuv420p', 'yuv422p', 'yuv444p', ...
-        'sharpness': None,  # Sharpness [float] -> 0.1, 0.2, 0.3, ...
-        'gamma': None,  # Gamma [float] -> 0.1, 0.2, 0.3, ...
-        'deblock': None,  # Deblocking [float] -> 0.1, 0.2, 0.3, ...
-        'noise_reduction': None,  # Noise reduction [float] -> 0.1, 0.2, 0.3, ...
+        'sharpness': '0.2',  # Sharpness [float] -> 0.1, 0.2, 0.3, ...
+        'gamma': '0.1',  # Gamma [float] -> 0.1, 0.2, 0.3, ...
+        'deblock': '0.2',  # Deblocking [float] -> 0.1, 0.2, 0.3, ...
+        'noise_reduction': '0.1',  # Noise reduction [float] -> 0.1, 0.2, 0.3, ...
         'additional_metadata': {
             'metadata title=': None,  # Title [str]
             'metadata:s:v:0 title=': None,  # Title [str]
@@ -125,7 +125,12 @@ def render_file(input: pathlib.Path, output: pathlib.Path, now_ep_number: int, t
     ffmpeg_path = 'ffmpeg.exe'
     ffmpeg_process = f'"{ffmpeg_path}" {" ".join(ffmpeg_other_args)}'
     print(f'[info] Queue: {now_ep_number}/{total_eps_quantity} - Running FFmpeg command: {ffmpeg_process}\n')
-    ffmpeg_process = subprocess.run(ffmpeg_process, shell=True)
+
+    try:
+        ffmpeg_process = subprocess.run(ffmpeg_process, check=True)
+    except Exception:
+        return 1
+
     print(f'\n[info] Queue: {now_ep_number}/{total_eps_quantity} - FFmpeg process finished with exit code {ffmpeg_process.returncode}!')
 
     return ffmpeg_process.returncode
@@ -137,9 +142,7 @@ def main() -> None:
     if settings.general.input_type == 'file':
         total_file_list = [pathlib.Path(settings.general.input)]
     else:
-        total_file_list = [pathlib.Path(settings.general.input, _) for _ in os.listdir(settings.general.input)
-                           if not settings.general.input_extensions or
-                           _.split('.')[-1] in settings.general.input_extensions]
+        total_file_list = [pathlib.Path(settings.general.input, _) for _ in os.listdir(settings.general.input) if not settings.general.input_extensions or _.split('.')[-1] in settings.general.input_extensions]
 
     total_file_quantity = len(total_file_list)
     now_ep_number = 0
@@ -165,7 +168,7 @@ def main() -> None:
 
         if settings.end_action.custom_command:
             print(f'[info] Running custom command in shell: "{settings.end_action.custom_command}"...')
-            subprocess.run(settings.end_action.custom_command, shell=True)
+            subprocess.run(settings.end_action.custom_command)
         else:
             if not settings.end_action.mode:
                 print('[info] No final action was set, exiting...')
@@ -173,11 +176,11 @@ def main() -> None:
                 end_action_mode = settings.end_action.mode.lower()
                 print(f'[info] Executing final action: "{end_action_mode}"...')
                 if end_action_mode == 'shutdown':
-                    subprocess.run('shutdown -s -t 60', shell=True)
+                    subprocess.run('shutdown -s -t 30')
                 elif end_action_mode == 'restart':
-                    subprocess.run('shutdown -r -t 60', shell=True)
+                    subprocess.run('shutdown -r -t 30')
                 elif end_action_mode == 'suspend':
-                    subprocess.run('shutdown -h -t 60', shell=True)
+                    subprocess.run('shutdown -h -t 30')
 
 
 if __name__ == '__main__':
