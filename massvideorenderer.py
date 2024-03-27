@@ -1,34 +1,201 @@
 import os
 import sys
 import time
+import subprocess
+import string
+from os import cpu_count
 from shutil import which
 from pathlib import Path
 from argparse import ArgumentParser, Namespace
-import subprocess
+from typing import Any, Union
+from webbrowser import open_new_tab as open_browser_new_tab
+from pymediainfo import MediaInfo
 
+
+def debug_print_dict_items(class_instance: object) -> None:
+    print('\n'.join([f'{key}={value}' for key, value in class_instance.__dict__.items()]))
+
+def open_github_repository() -> None:
+    """
+    Open GitHub repository in the default web browser
+    """
+
+    open_browser_new_tab(AppInfo.source_code_url)
+
+def append_to_list(raw_list: list, value: Any, prefix: Any, ignore_none_value: bool = False) -> list:
+    if isinstance(value, bool):
+        return raw_list
+
+    if ignore_none_value and value is None:
+        return raw_list
+
+    if prefix is not None:
+        raw_list.append(str(prefix))
+    if value is not None:
+        raw_list.append(str(value))
+
+    return raw_list
+
+def retrieve_media_info(path_to_file: Any) -> dict:
+    """
+    Retrieve media information from a file using pymediainfo library
+    :param path_to_file:
+    :return: dict
+    """
+
+    def convert_value(_value: str) -> Union[int, float, str]:
+        """
+        Convert value to integer, float or string based on the input
+        :param _value:
+        :return: Union[int, float, str]
+        """
+
+        if _value.isdigit():
+            converted_value = int(_value)
+        else:
+            try:
+                converted_value = float(_value)
+            except ValueError:
+                converted_value = str(_value)
+
+        return converted_value
+
+    media_info = MediaInfo.parse(Path(path_to_file).resolve())
+    media_info_data = {'video': list(), 'audio': list(), 'subtitle': list(), 'metadata': list()}
+
+    for track in media_info.tracks:
+        track_info = dict()
+        for key, value in track.__dict__.items():
+            if key != '_mediainfo':
+                track_info[key] = convert_value(str(value))
+        if track.track_type == 'Video':
+            media_info_data['video'].append(track_info)
+        elif track.track_type == 'Audio':
+            media_info_data['audio'].append(track_info)
+        elif track.track_type == 'Text':
+            media_info_data['subtitle'].append(track_info)
+        else:
+            media_info_data['metadata'].append(track_info)
+
+    return media_info_data
+
+
+class AppInfo:
+    name = 'MassVideoRenderer'
+    version = '0.1.0'
+    source_code_url = 'https://github.com/Henrique-Coder/mass-video-renderer'
 
 class MainConfig:
     def __init__(self, user_args: Namespace):
-        self.input_type = 'file' if Path(user_args.input).is_file() else 'directory'  # 'file' or 'directory'
-        self.input = user_args.input  # Input directory or file path
-        self.output = user_args.output  # Output directory
-        self.input_extensions = None if not user_args.input_extensions else user_args.input_extensions.split(',')  # Input file extensions only for directory mode (separated by comma)
-        self.output_extension = user_args.output_extension  # Output files extension
+        self.input_filepath = user_args.input_filepath
+        self.output_filepath = user_args.output_filepath
+
+    class MediaInfoData:
+        raw_data = None  # Raw media information data
 
     class FFmpegGeneralSettings:
-        ffmpeg_path = which('ffmpeg')
-        def __init__(self):
-            ffmpeg_path = {'value': None, 'default': which('ffmpeg')}  # FFmpeg binary path
-            gpu_acceleration_api = {'value': None, 'default': None}  # GPU acceleration API: 'cuda', 'vaapi', 'd3d11va', 'opencl'
-            gpu_acceleration_device = {'value': None, 'default': None}  # GPU acceleration device index: 0, 1, 2, ...
-            threads = {'value': 0, 'default': 0}  # Number of threads to use
-            overwrite_existing_files = {'value': True, 'default': True}  # Overwrite existing files
-            hide_banner = {'value': True, 'default': True}  # Hide FFmpeg banner
-            show_extra_debug_info = {'value': True, 'default': True}  # Show extra FFmpeg debug info
+        ffmpeg_path = None
+        gpu_acceleration_api = None
+        gpu_acceleration_device_index = None
+        threads = None
+        overwrite_existing_files = None
+        hide_banner = None
+        show_extra_debug_info = None
+
+        def calculate_best_parameters(self) -> None:
+            def set_ffmpeg_path() -> None:
+                """
+                Set absolute path to FFmpeg binary file if available
+                """
+
+                _ffmpeg_path = which('ffmpeg')
+
+                if not _ffmpeg_path:
+                    self.ffmpeg_path = None
+
+                self.ffmpeg_path = Path(_ffmpeg_path).resolve().as_posix()
+
+            def set_gpu_acceleration_api_and_device_index() -> None:
+                """
+                Set ideal GPU acceleration API and device index if available
+                """
+
+                # Feature unavailable at the moment. (Please ignore this function)
+                self.gpu_acceleration_api = None
+                self.gpu_acceleration_device_index = None
+                return
+                # ...
+
+                _gpu_acceleration_api = None
+                _gpu_acceleration_device_index = None
+
+                if which('nvidia-smi'):
+                    _gpu_acceleration_api = 'cuda'
+                elif which('vainfo'):
+                    _gpu_acceleration_api = 'vaapi'
+                elif which('dxva2'):
+                    _gpu_acceleration_api = 'd3d11va'
+                elif which('clinfo'):
+                    _gpu_acceleration_api = 'opencl'
+                else:
+                    self.gpu_acceleration_api = _gpu_acceleration_api
+                    self.gpu_acceleration_device_index = _gpu_acceleration_device_index
+
+                if _gpu_acceleration_api:
+                    self.gpu_acceleration_api = _gpu_acceleration_api
+                    self.gpu_acceleration_device_index = 0
+
+            def set_threads() -> None:
+                """
+                Set ideal number of threads to use
+                """
+
+                _threads = cpu_count()
+
+                if not _threads or _threads <= 1:
+                    self.threads = None
+                else:
+                    self.threads = _threads - 1
+
+            def set_other_settings() -> None:
+                """
+                Set default values for other FFmpeg settings
+                """
+
+                # Overwrite existing files
+                self.overwrite_existing_files = True
+
+                # Hide FFmpeg banner
+                self.hide_banner = True
+
+                # Show extra FFmpeg debug info
+                self.show_extra_debug_info = True
+
+            set_ffmpeg_path()
+            set_gpu_acceleration_api_and_device_index()
+            set_threads()
+            set_other_settings()
+
+        def generate_cli_args(self) -> list:
+            """
+            Generate FFmpeg CLI arguments based on the best available settings
+            :return: list
+            """
+
+            args = list()
+            append_to_list(args, self.ffmpeg_path, None)
+            append_to_list(args, self.gpu_acceleration_api, '-hwaccel', True)
+            append_to_list(args, self.gpu_acceleration_device_index, '-hwaccel_device', True)
+            append_to_list(args, self.threads, '-threads', True)
+            if self.overwrite_existing_files: append_to_list(args, None, '-y')
+            if self.hide_banner: append_to_list(args, None, '-hide_banner')
+            if self.show_extra_debug_info: append_to_list(args, None, '-stats')
+
+            return args
 
     class FFmpegRenderSettings:
         class VideoSection:
-            class Arguments:
+            class Arguments():
                 def __init__(self):
                     codec = {'value': 'libsvtav1', 'default': None, 'arg': '-c:v {}'}  # Video codec
                     frame_rate = {'value': None, 'default': None, 'arg': '-framerate'}  # Video frame rate: 30, 60, 120, ...
@@ -95,16 +262,28 @@ class MainConfig:
             task = {'value': None, 'default': None}  # Power action available tasks: 'shutdown', 'restart', 'hibernate', 'sleep', 'lock'
 
 def main_app(user_args: Namespace):
-    pass
+    # Initialize Main Configuration and FFmpeg General Settings classes
+    main_config = MainConfig(user_args)
+    ffmpeg_general_settings = main_config.FFmpegGeneralSettings()
 
+    # Initialize FFmpeg general settings
+    main_config.MediaInfoData.raw_data = retrieve_media_info(main_config.input_filepath)
+    ffmpeg_general_settings.calculate_best_parameters()
+    print(ffmpeg_general_settings.generate_cli_args())
 
 
 if __name__ == '__main__':
-    # Parse command line arguments
+    # Parse command line arguments and run the main application
     parser = ArgumentParser(description='MassVideoRenderer')
-    parser.add_argument('-v', '--version', action='version', version='MassVideoRenderer 0.0.2')
-    parser.add_argument('-i', '--input', metavar='input', type=str, required=True, help='Input directory or file path')
-    parser.add_argument('-o', '--output', metavar='output', type=str, required=True, help='Output directory')
-    parser.add_argument('-ies', '--input-extensions', default=None, metavar='input_extensions', type=str, required=False, help='Input file extensions only for directory mode (separated by comma)')
-    parser.add_argument('-oe', '--output-extension', metavar='output_extension', type=str, required=True, help='Output files extension')
+    parser.add_argument('-v', '--version', action='version', version=f'{AppInfo.name} {AppInfo.version}')
+    parser.add_argument('-gh', '--github', action='store_true', help=f'Open {AppInfo.name} GitHub repository in your default web browser')
+    parser.add_argument('-i', '--input-filepath', metavar='input_filepath', type=str, help='Input file path')
+    parser.add_argument('-o', '--output-filepath', metavar='output_filepath', type=str, help='Output file path')
     args = parser.parse_args()
+
+    if args.github:
+        open_github_repository()
+    elif args.input_filepath and args.output_filepath:
+        main_app(args)
+    else:
+        parser.print_help()
