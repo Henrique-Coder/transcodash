@@ -1,188 +1,110 @@
 import os
 import sys
 import time
-import pathlib
-import argparse
+from shutil import which
+from pathlib import Path
+from argparse import ArgumentParser, Namespace
 import subprocess
 
 
-parser = argparse.ArgumentParser(description='MassVideoRenderer')
-parser.add_argument('-v',  '--version',                        action='version', version='MassVideoRenderer 0.0.1')
-parser.add_argument('-i',  '--input',                          metavar='input',            type=str, required=True,  help='Input directory',)
-parser.add_argument('-o',  '--output',                         metavar='output',           type=str, required=True,  help='Output directory')
-parser.add_argument('-ie', '--input-extensions', default=None, metavar='input_extensions', type=str, required=False, help='Input files extensions (separated by comma)')
-parser.add_argument('-oe', '--output-extension',               metavar='output_extension', type=str, required=True,  help='Output files extension')
+class MainConfig:
+    def __init__(self, user_args: Namespace):
+        self.input_type = 'file' if Path(user_args.input).is_file() else 'directory'  # 'file' or 'directory'
+        self.input = user_args.input  # Input directory or file path
+        self.output = user_args.output  # Output directory
+        self.input_extensions = None if not user_args.input_extensions else user_args.input_extensions.split(',')  # Input file extensions only for directory mode (separated by comma)
+        self.output_extension = user_args.output_extension  # Output files extension
 
-args = parser.parse_args()
+    class FFmpegGeneralSettings:
+        ffmpeg_path = which('ffmpeg')
+        def __init__(self):
+            ffmpeg_path = {'value': None, 'default': which('ffmpeg')}  # FFmpeg binary path
+            gpu_acceleration_api = {'value': None, 'default': None}  # GPU acceleration API: 'cuda', 'vaapi', 'd3d11va', 'opencl'
+            gpu_acceleration_device = {'value': None, 'default': None}  # GPU acceleration device index: 0, 1, 2, ...
+            threads = {'value': 0, 'default': 0}  # Number of threads to use
+            overwrite_existing_files = {'value': True, 'default': True}  # Overwrite existing files
+            hide_banner = {'value': True, 'default': True}  # Hide FFmpeg banner
+            show_extra_debug_info = {'value': True, 'default': True}  # Show extra FFmpeg debug info
 
-for k, v in args.__dict__.items():
-    setattr(args, k, v)
+    class FFmpegRenderSettings:
+        class VideoSection:
+            class Arguments:
+                def __init__(self):
+                    codec = {'value': 'libsvtav1', 'default': None, 'arg': '-c:v {}'}  # Video codec
+                    frame_rate = {'value': None, 'default': None, 'arg': '-framerate'}  # Video frame rate: 30, 60, 120, ...
+                    bit_rate = {'value': 0, 'default': None, 'arg': '-b:v'}  # Video bit rate: (0 = VBR)
+                    min_rate = {'value': 1, 'default': None, 'arg': '-minrate:v'}  # Minimum video bit rate: 1m, 2m, 3m, ...
+                    max_rate = {'value': 6, 'default': None, 'arg': '-maxrate:v'}  # Maximum video bit rate: 1m, 2m, 3m, ...
+                    quality = {'value': 'high', 'default': None, 'arg': '-quality'}  # Quality preset: 'high', 'medium', 'low', ...
+                    level = {'value': 4.0, 'default': None, 'arg': '-level'}  # Level: 1.0, 2.0, 3.0, 4.0, 5.0, ...
+                    tile_columns = {'value': 2, 'default': None, 'arg': '-tile_columns'}  # Tip: tile_columns * tile_rows = YOUR_CPU_CORES
+                    tile_rows = {'value': 4, 'default': None, 'arg': '-tile_rows'}  # Tip: tile_rows * tile_columns = YOUR_CPU_CORES
+                    profile = {'value': 'main', 'default': None, 'arg': '-profile:v'}  # Video profile: 'main', 'high', ...
+                    prediction = {'value': 'complex', 'default': None, 'arg': '-pred'}  # Prediction mode: 'simple', 'complex', ...
+                    b_frames_strategy = {'value': 1, 'default': None, 'arg': '-b_strategy'}  # B-frames strategy: 0, 1, 2, 3, ...
+                    b_frames = {'value': 0, 'default': None, 'arg': '-bf'}  # Number of B-frames: 1, 2, 3, ...
+                    pixel_format = {'value': 'yuv420p', 'default': None, 'arg': '-pix_fmt'}  # Pixel format: 'yuv420p', 'yuv422p', 'yuv444p', ...
 
+            class Filters:
+                def __init__(self):
+                    tune = {'value': None, 'default': None, 'arg': '-tune'}  # Tune: 'animation', 'film', 'grain', ...
+                    noise_reduction = {'value': None, 'default': None, 'arg': '-noise_reduction'}  # Noise reduction: 0.1, 0.2, 0.3, ...
+                    deblock = {'value': None, 'default': None, 'arg': '-deblock'}  # Deblocking: 0.1, 0.2, 0.3, ...
+                    sharpness = {'value': None, 'default': None, 'arg': '-sharpness'}  # Sharpness: 0.1, 0.2, 0.3, ...
+                    gamma = {'value': None, 'default': None, 'arg': '-gamma'}  # Gamma: 0.1, 0.2, 0.3, ...
 
-class settings:
-    class general:  # Auto-generated settings (do not modify)
-        input_type = 'file' if pathlib.Path.is_file(pathlib.Path(args.input)) else 'directory'  # Input type: 'file' or 'directory' [str]
-        input = args.input  # Input directory or file [str]
-        output = args.output  # Output directory [str]
-        input_extensions = None if not args.input_extensions else args.input_extensions.split(',')  # Allowed extensions to be rendered [list]
-        output_extension = args.output_extension  # Output files extension [str]
+        class AudioSection:
+            class Arguments:
+                def __init__(self):
+                    codec = {'value': 'libopus', 'default': None, 'arg': '-c:a'}  # Audio codec
+                    bit_rate = {'value': '128k', 'default': None, 'arg': '-b:a'}  # Audio bit rate: '64k', '128k', '256k', ...
+                    sample_rate = {'value': '48000', 'default': None, 'arg': '-ar'}  # Audio sample rate: '48000', '44100', '22050', ...
 
-    class ffmpeg_settings:  # FFmpeg's settings (modify if necessary)
-        replace_existing_file = True  # Replace existing output file [bool = True]
-        intentional_delay_between_encodings = 5  # Intentional delay (seconds) between encodings [int = 15]
-        hide_ffmpeg_banner = True  # Hide FFmpeg banner [bool = True]
-        show_extra_ffmpeg_debug_info = True  # Show extra FFmpeg debug info [bool = True]
-        ffmpeg_log_level_debug = 'warning'  # FFmpeg log level debug [str = 'warning']
+            class Filters:
+                def __init__(self):
+                    pass
 
-    ffmpeg_render_args = {
-        'hwaccel': None,  # Hardware acceleration API [str = None] -> 'cuda', 'd3d11va', 'opencl', 'vaapi'
-        'hwaccel_device': None,  # Hardware acceleration device (GPU) ID [int = None] -> 0, 1, 2, ...
-        'c:v': 'libsvtav1',  # Video codec [str] -> 'libsvtav1', 'libx264', 'libx265', ...
-        'minrate:v': '1m',  # Minimum video bit rate [str] -> '1m', '2m', '3m', ...
-        'maxrate:v': '8m',  # Maximum video bit rate [str] -> '1m', '2m', '3m', ...
-        'quality': 'high',  # Quality preset [str] -> 'high', 'medium', 'low', ...
-        'level': 4.0,  # Level [float] -> 1.0, 2.0, 3.0, 4.0, 5.0, ...
-        'b:v': 0,  # Video bit rate [int] (0 = VBR)
-        'tune': 0,  # Tune preset [str]
-        'framerate': None,  # Frame rate [str] https://github.com/Henrique-Coder/CodeFormer https://github.com/Henrique-Coder/CodeFormer
-        'threads': 0,  # Number of threads [int = 0]
-        'tile_columns': 2,  # Number of tile columns [int] -> tile_columns * tile_rows = YOUR_CPU_CORES
-        'tile_rows': 4,  # Number of tile rows [int] -> tile_rows * tile_columns = YOUR_CPU_CORES
-        'profile:v': 'main',  # Video profile [str] -> 'main', 'high', ...
-        'pred': 'complex',  # Prediction mode [int] -> 'simple', 'complex', ...
-        'b_strategy': 1,  # B-frames strategy [int] -> 0, 1, 2, 3, ...
-        'bf': 0,  # Number of B-frames [int] -> 1, 2, 3, ...
-        'c:a': 'libopus',  # Audio codec [str]
-        'b:a': '128k',  # Audio bit rate [str] -> '64k', '128k', '256k', ...
-        'ar': '48000',  # Audio sample rate [str]
-        'c:s': 'webvtt',  # Subtitle codec [str]
-        'pix_fmt': 'yuv420p',  # Pixel format [str] -> 'yuv420p', 'yuv422p', 'yuv444p', ...
-        'sharpness': '0.2',  # Sharpness [float] -> 0.1, 0.2, 0.3, ...
-        'gamma': '0.1',  # Gamma [float] -> 0.1, 0.2, 0.3, ...
-        'deblock': '0.2',  # Deblocking [float] -> 0.1, 0.2, 0.3, ...
-        'noise_reduction': '0.1',  # Noise reduction [float] -> 0.1, 0.2, 0.3, ...
-        'additional_metadata': {
-            'metadata title=': None,  # Title [str]
-            'metadata:s:v:0 title=': None,  # Title [str]
-            'metadata:s:a:0 title=': None,  # Title [str]
-            'metadata:s:v:0 language=': None,  # Language [str]
-            'metadata:s:a:0 language=': None,  # Language [str]
-            'metadata artist=': None,  # Artist [str]
-            'metadata year=': None,  # Year [str]
-            'metadata genre=': None,  # Genre [str]
-            'metadata album=': None,  # Album [str]
-            'metadata album_artist=': None,  # Album artist [str]
-            'metadata comment=': None,  # Comment [str]
-            'metadata track=': None,  # Track [int]
-        }
-    }
+        class SubtitleArguments:
+            def __init__(self):
+                codec = {'value': 'webvtt', 'default': None, 'arg': '-c:s'}
 
-    class end_action:
-        mode = None  # The action when finished should be: 'shutdown', 'restart' or 'suspend' [str]
-        custom_command = None  # Custom Windows bash command to be executed when finished (this will override 'mode' option) [str]
-        time = 30  # Intentional delay (seconds) before executing final action (if enabled) [int = 60]
+        class MetadataArguments:
+            def __init__(self):
+                media_title = {'value': None, 'default': None, 'arg': '-metadata title='}  # Media title
+                video_stream_title = {'value': None, 'default': None, 'arg': '-metadata:s:v:0 title='}  # Video stream title
+                audio_stream_title = {'value': None, 'default': None, 'arg': '-metadata:s:a:0 title='}  # Audio stream title
+                video_stream_language = {'value': None, 'default': None, 'arg': '-metadata:s:v:0 language='}  # Video stream language
+                audio_stream_language = {'value': None, 'default': None, 'arg': '-metadata:s:a:0 language='}  # Audio stream language
+                subtitle_stream_language = {'value': None, 'default': None, 'arg': '-metadata:s:s:0 language='}  # Subtitle stream language
+                media_artist = {'value': None, 'default': None, 'arg': '-metadata artist='}  # Media artist
+                media_year = {'value': None, 'default': None, 'arg': '-metadata year='}  # Media year
+                media_genre = {'value': None, 'default': None, 'arg': '-metadata genre='}  # Media genre
+                media_album = {'value': None, 'default': None, 'arg': '-metadata album='}  # Media album
+                media_album_artist = {'value': None, 'default': None, 'arg': '-metadata album_artist='}  # Media album artist
+                media_comment = {'value': None, 'default': None, 'arg': '-metadata comment='}  # Media comment
+                media_track_number = {'value': None, 'default': None, 'arg': '-metadata track='}  # Media track number
 
+        class CustomArguments:
+            def __init__(self):
+                custom_args = {'value': None, 'default': None}
 
-def flatten_dict(d, parent_key=str(), sep=':', skip_none=True) -> list:
-    items = list()
-    for k, v in d.items():
-        new_key = f'{parent_key}{sep}{k}' if parent_key else k
-        if isinstance(v, dict):
-            items.extend(flatten_dict(v, new_key, sep=sep, skip_none=skip_none))
-        elif v is not None or not skip_none:
-            items.append((new_key, str(v) if v is not None else str()))
+    class RunOnFinish:
+        def __init__(self):
+            cmd = {'value': None, 'default': None}  # Custom bash command to run on finish (this will be executed before power action)
+            delay = {'value': None, 'default': 5}  # Delay in seconds before power action and after custom command execution
+            task = {'value': None, 'default': None}  # Power action available tasks: 'shutdown', 'restart', 'hibernate', 'sleep', 'lock'
 
-    return items
+def main_app(user_args: Namespace):
+    pass
 
-
-def render_file(input: pathlib.Path, output: pathlib.Path, now_ep_number: int, total_eps_quantity: int) -> int:
-    # Creating FFmpeg arguments
-    output_dir = output.absolute()
-    ffmpeg_other_args = [f'-{key} {value}' if value else f'-{key}' for key, value in flatten_dict(settings.ffmpeg_render_args, sep=' ')]
-    ffmpeg_other_args.insert(0, f'-i "{input.absolute()}"')
-
-    # Adding additional arguments
-    if settings.ffmpeg_settings.replace_existing_file:
-        ffmpeg_other_args.insert(1, '-y')
-        ffmpeg_other_args.append(f'"{output_dir}"')
-    else:
-        output_wo_ext = output_dir.parent / output_dir.stem
-        while output_dir.exists():
-            output_wo_ext = pathlib.Path(f'{output_wo_ext}_new')
-            output_dir = pathlib.Path(f'{output_wo_ext}.{settings.general.output_extension}')
-        ffmpeg_other_args.append(f'"{output_dir}"')
-
-    if settings.ffmpeg_settings.hide_ffmpeg_banner:
-        ffmpeg_other_args.insert(2, '-hide_banner')
-    if settings.ffmpeg_settings.show_extra_ffmpeg_debug_info:
-        ffmpeg_other_args.insert(2, '-stats')
-    if settings.ffmpeg_settings.ffmpeg_log_level_debug:
-        ffmpeg_other_args.insert(2, f'-loglevel {settings.ffmpeg_settings.ffmpeg_log_level_debug}')
-
-    ffmpeg_other_args.insert(2, '-strict experimental')
-
-    # Executing FFmpeg with arguments (and verifying if it was successful in the end)
-    ffmpeg_path = 'ffmpeg.exe'
-    ffmpeg_process = f'"{ffmpeg_path}" {" ".join(ffmpeg_other_args)}'
-    print(f'[info] Queue: {now_ep_number}/{total_eps_quantity} - Running FFmpeg command: {ffmpeg_process}\n')
-
-    try:
-        ffmpeg_process = subprocess.run(ffmpeg_process, check=True)
-    except Exception:
-        return 1
-
-    print(f'\n[info] Queue: {now_ep_number}/{total_eps_quantity} - FFmpeg process finished with exit code {ffmpeg_process.returncode}!')
-
-    return ffmpeg_process.returncode
-
-
-def main() -> None:
-    os.makedirs(settings.general.output, exist_ok=True)
-
-    if settings.general.input_type == 'file':
-        total_file_list = [pathlib.Path(settings.general.input)]
-    else:
-        total_file_list = [pathlib.Path(settings.general.input, _) for _ in os.listdir(settings.general.input) if not settings.general.input_extensions or _.split('.')[-1] in settings.general.input_extensions]
-
-    total_file_quantity = len(total_file_list)
-    now_ep_number = 0
-
-    for input_file in total_file_list:
-        render_start_time = time.time()
-        now_ep_number += 1
-        print(f'\n[info] Queue: {now_ep_number}/{total_file_quantity} - Starting transcoding of file "{input_file}"...')
-        output_file = pathlib.Path(settings.general.output, f'{input_file.stem}.{settings.general.output_extension}')
-        if render_file(input_file, output_file, now_ep_number, total_file_quantity) == 0:
-            print(f'[success] Queue: {now_ep_number}/{total_file_quantity} - File "{input_file}" successfully transcoded! (took {time.time() - render_start_time:.2f} seconds)')
-        else:
-            print(f'[error] Queue: {now_ep_number}/{total_file_quantity} - File "{input_file}" failed to be transcoded! (took {time.time() - render_start_time:.2f} seconds)')
-
-        if now_ep_number != total_file_quantity:
-            print(f'[info] Waiting {settings.ffmpeg_settings.intentional_delay_between_encodings} second(s) before starting next encoding...')
-            time.sleep(settings.ffmpeg_settings.intentional_delay_between_encodings)
-            print('\n---')
-
-    if settings.end_action.mode or settings.end_action.custom_command:
-        print(f'[info] Waiting {settings.end_action.time} second(s) before executing final action...')
-        time.sleep(settings.end_action.time)
-
-        if settings.end_action.custom_command:
-            print(f'[info] Running custom command in shell: "{settings.end_action.custom_command}"...')
-            subprocess.run(settings.end_action.custom_command)
-        else:
-            if not settings.end_action.mode:
-                print('[info] No final action was set, exiting...')
-            else:
-                end_action_mode = settings.end_action.mode.lower()
-                print(f'[info] Executing final action: "{end_action_mode}"...')
-                if end_action_mode == 'shutdown':
-                    subprocess.run('shutdown -s -t 30')
-                elif end_action_mode == 'restart':
-                    subprocess.run('shutdown -r -t 30')
-                elif end_action_mode == 'suspend':
-                    subprocess.run('shutdown -h -t 30')
 
 
 if __name__ == '__main__':
-    main()
-    sys.exit()
+    # Parse command line arguments
+    parser = ArgumentParser(description='MassVideoRenderer')
+    parser.add_argument('-v', '--version', action='version', version='MassVideoRenderer 0.0.2')
+    parser.add_argument('-i', '--input', metavar='input', type=str, required=True, help='Input directory or file path')
+    parser.add_argument('-o', '--output', metavar='output', type=str, required=True, help='Output directory')
+    parser.add_argument('-ies', '--input-extensions', default=None, metavar='input_extensions', type=str, required=False, help='Input file extensions only for directory mode (separated by comma)')
+    parser.add_argument('-oe', '--output-extension', metavar='output_extension', type=str, required=True, help='Output files extension')
+    args = parser.parse_args()
