@@ -304,7 +304,7 @@ def main_app(user_args: Namespace):
 
 if __name__ == '__main__':
     # Parse command line arguments and run the main application
-    parser = ArgumentParser(description=f"{AppInfo.name} - Smart CLI tool for optimal media transcoding. It analyzes your computer and the input media files, generating and executing an optimal FFmpeg command for efficient conversion with no visible loss of quality.")
+    parser = ArgumentParser(description=f"{AppInfo.name} is a smart CLI tool for optimal media transcoding. It analyzes your computer and the input media files, generating and executing an optimal FFmpeg command for efficient conversion with no visible loss of quality.")
     parser.add_argument('-v', '--version', action='version', version=f'{AppInfo.name} {AppInfo.version}')
     parser.add_argument('-gh', '--github', action='store_true', help=f'Open {AppInfo.name} GitHub repository in your default web browser')
     parser.add_argument('-i', '--input-filepath', metavar='input_filepath', type=str, help='Input file path')
