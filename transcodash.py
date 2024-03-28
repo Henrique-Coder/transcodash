@@ -80,37 +80,28 @@ class AppInfo:
     version = '0.1.0'
     source_code_url = 'https://github.com/Henrique-Coder/transcodash'
 
-class UserArgs:
-    def __init__(self, user_args: Namespace):
-        self.input_filepath = user_args.input_filepath
-        self.output_filepath = user_args.output_filepath
-        self.video_codec = user_args.video_codec
+def check_arguments(args: Namespace) -> None:
+    _input_filepath = Path(args.input_filepath).resolve()
+    _output_filepath = Path(args.output_filepath).resolve()
 
-    def check_arguments(self) -> None:
-        _input_filepath = Path(self.input_filepath).resolve()
-        _output_filepath = Path(self.output_filepath).resolve()
+    if not Path(args.input_filepath).is_file() or not Path(args.input_filepath).exists():
+        print(f'[error] Input file path argument is invalid: {_input_filepath.as_posix()}')
+        exit_app()
 
-        if not Path(self.input_filepath).is_file() or not Path(self.input_filepath).exists():
-            print(f'[error] Input file path argument is invalid: {_input_filepath.as_posix()}')
-            exit_app()
+    args.input_filepath = _input_filepath.as_posix()
+    args.output_filepath = _output_filepath.as_posix()
 
-        self.input_filepath = _input_filepath.as_posix()
-        self.output_filepath = _output_filepath.as_posix()
+    command_output = None
 
-        command_output = None
+    try:
+        command_output = check_output(['ffmpeg', '-codecs'], stderr=STDOUT).decode()
+    except CalledProcessError as e:
+        print(f'[error] Failed to check available FFmpeg codecs: {e} - Internal error: {e.output.decode()}')
+        exit_app()
 
-        try:
-            command_output = check_output(['ffmpeg', '-codecs'], stderr=STDOUT).decode()
-        except CalledProcessError as e:
-            print(f'[error] Failed to check available FFmpeg codecs: {e} - Internal error: {e.output.decode()}')
-            exit_app()
-
-        if self.video_codec not in command_output:
-            print(f'[error] Chosen video codec is not available in your local FFmpeg installation: {self.video_codec}')
-            exit_app()
-
-class MediaInfoData:
-    raw_data = None
+    if args.video_codec not in command_output:
+        print(f'[error] Chosen video codec is not available in your local FFmpeg installation: {args.video_codec}')
+        exit_app()
 
 class FFmpegGeneralSettings:
     ffmpeg_path = None
@@ -213,92 +204,144 @@ class FFmpegGeneralSettings:
         return generated_args
 
 class FFmpegRenderSettings:
+    def __init__(self):
+        self.video_section = self.VideoSection()
+        self.audio_section = self.AudioSection()
+        self.subtitle_arguments = self.SubtitleArguments()
+        self.metadata_arguments = self.MetadataArguments()
+        self.custom_arguments = self.CustomArguments()
+
+    def generate_cli_args(self) -> list:
+        """
+        Generate FFmpeg CLI arguments based on the best available settings
+        :return: list
+        """
+
+        generated_args = self.video_section.generate_cli_args()
+        generated_args += self.audio_section.generate_cli_args()
+        generated_args += self.subtitle_arguments.generate_cli_args()
+        generated_args += self.metadata_arguments.generate_cli_args()
+        generated_args += self.custom_arguments.generate_cli_args()
+        return generated_args
+
     class VideoSection:
-        class Arguments():
-            def __init__(self):
-                codec = {'value': 'libsvtav1', 'default': None, 'arg': '-c:v {}'}  # Video codec
-                frame_rate = {'value': None, 'default': None, 'arg': '-framerate'}  # Video frame rate: 30, 60, 120, ...
-                bit_rate = {'value': 0, 'default': None, 'arg': '-b:v'}  # Video bit rate: (0 = VBR)
-                min_rate = {'value': 1, 'default': None, 'arg': '-minrate:v'}  # Minimum video bit rate: 1m, 2m, 3m, ...
-                max_rate = {'value': 6, 'default': None, 'arg': '-maxrate:v'}  # Maximum video bit rate: 1m, 2m, 3m, ...
-                quality = {'value': 'high', 'default': None, 'arg': '-quality'}  # Quality preset: 'high', 'medium', 'low', ...
-                level = {'value': 4.0, 'default': None, 'arg': '-level'}  # Level: 1.0, 2.0, 3.0, 4.0, 5.0, ...
-                tile_columns = {'value': 2, 'default': None, 'arg': '-tile_columns'}  # Tip: tile_columns * tile_rows = YOUR_CPU_CORES
-                tile_rows = {'value': 4, 'default': None, 'arg': '-tile_rows'}  # Tip: tile_rows * tile_columns = YOUR_CPU_CORES
-                profile = {'value': 'main', 'default': None, 'arg': '-profile:v'}  # Video profile: 'main', 'high', ...
-                prediction = {'value': 'complex', 'default': None, 'arg': '-pred'}  # Prediction mode: 'simple', 'complex', ...
-                b_frames_strategy = {'value': 1, 'default': None, 'arg': '-b_strategy'}  # B-frames strategy: 0, 1, 2, 3, ...
-                b_frames = {'value': 0, 'default': None, 'arg': '-bf'}  # Number of B-frames: 1, 2, 3, ...
-                pixel_format = {'value': 'yuv420p', 'default': None, 'arg': '-pix_fmt'}  # Pixel format: 'yuv420p', 'yuv422p', 'yuv444p', ...
+        def __init__(self):
+            self.arguments = self.Arguments()
+            self.filters = self.Filters()
+
+        def generate_cli_args(self) -> list:
+            """
+            Generate FFmpeg CLI arguments based on the best available settings
+            :return: list
+            """
+
+            generated_args = self.arguments.generate_cli_args()
+            generated_args += self.filters.generate_cli_args()
+
+            return generated_args
+
+        class Arguments:
+            codec = None  # Video codec: libsvtav1 (-c:v)
+            frame_rate = None  # Video frame rate: None [30, 60, 120, ...] (-framerate)
+            bit_rate = None  # Video bit rate: 0 [1m, 2m, 3m, ...] (-b:v)
+            min_rate = None  # Minimum video bit rate: 1m [1m, 2m, 3m, ...] (-minrate:v)
+            max_rate = None  # Maximum video bit rate: 6m [1m, 2m, 3m, ...] (-maxrate:v)
+            quality = None  # Quality preset: high [high, medium, low, ...] (-quality)
+            level = None  # Level: 4.0 [1.0, 2.0, 3.0, 4.0, 5.0, ...] (-level)
+            tile_columns = None  # Tip: tile_columns * tile_rows = YOUR_CPU_CORES [0, 1, 2, 3, ...] (-tile_columns)
+            tile_rows = None  # Tip: tile_rows * tile_columns = YOUR_CPU_CORES [0, 1, 2, 3, ...] (-tile_rows)
+            profile = None  # Video profile: main [main, high, ...] (-profile:v)
+            prediction = None  # Prediction mode: complex [simple, complex, ...] (-pred)
+            b_frames_strategy = None  # B-frames strategy: 1 [0, 1, 2, 3, ...] (-b_strategy)
+            b_frames = None  # Number of B-frames: 0 [1, 2, 3, ...] (-bf)
+            pixel_format = None  # Pixel format: yuv420p [yuv420p, yuv422p, yuv444p, ...] (-pix_fmt)
+
+            def calculate_best_parameters(self) -> None:
+                pass
+
+            def generate_cli_args(self) -> list:
+                """
+                Generate FFmpeg CLI arguments based on the best available settings
+                :return: list
+                """
+
+                generated_args = list()
+
+                return generated_args
 
         class Filters:
-            def __init__(self):
-                tune = {'value': None, 'default': None, 'arg': '-tune'}  # Tune: 'animation', 'film', 'grain', ...
-                noise_reduction = {'value': None, 'default': None, 'arg': '-noise_reduction'}  # Noise reduction: 0.1, 0.2, 0.3, ...
-                deblock = {'value': None, 'default': None, 'arg': '-deblock'}  # Deblocking: 0.1, 0.2, 0.3, ...
-                sharpness = {'value': None, 'default': None, 'arg': '-sharpness'}  # Sharpness: 0.1, 0.2, 0.3, ...
-                gamma = {'value': None, 'default': None, 'arg': '-gamma'}  # Gamma: 0.1, 0.2, 0.3, ...
+            tune = None  # Tune: None [animation, film, grain, ...] (-tune)
+            noise_reduction = None  # Noise reduction: None [0.1, 0.2, 0.3, ...] (-noise_reduction)
+            deblock = None  # Deblocking: None [0.1, 0.2, 0.3, ...] (-deblock)
+            sharpness = None  # Sharpness: None [0.1, 0.2, 0.3, ...] (-sharpness)
+            gamma = None  # Gamma: None [0.1, 0.2, 0.3, ...] (-gamma)
+
+            def generate_cli_args(self) -> list:
+                """
+                Generate FFmpeg CLI arguments based on the best available settings
+                :return: list
+                """
+
+                generated_args = list()
+
+                return generated_args
 
     class AudioSection:
         class Arguments:
-            def __init__(self):
-                codec = {'value': 'libopus', 'default': None, 'arg': '-c:a'}  # Audio codec
-                bit_rate = {'value': '128k', 'default': None, 'arg': '-b:a'}  # Audio bit rate: '64k', '128k', '256k', ...
-                sample_rate = {'value': '48000', 'default': None, 'arg': '-ar'}  # Audio sample rate: '48000', '44100', '22050', ...
+            codec = None  # Audio codec: libopus (-c:a)
+            bit_rate = None  # Audio bit rate: 128k [64k, 128k, 256k, ...] (-b:a)
+            sample_rate = None  # Audio sample rate: 48000 [48000, 44100, 22050, ...] (-ar)
 
         class Filters:
-            def __init__(self):
-                pass
+            pass
 
     class SubtitleArguments:
-        def __init__(self):
-            codec = {'value': 'webvtt', 'default': None, 'arg': '-c:s'}
+        codec = None  # Subtitle codec: webvtt (-c:s)
 
-    class MetadataArguments:
-        def __init__(self):
-            media_title = {'value': None, 'default': None, 'arg': '-metadata title='}  # Media title
-            video_stream_title = {'value': None, 'default': None, 'arg': '-metadata:s:v:0 title='}  # Video stream title
-            audio_stream_title = {'value': None, 'default': None, 'arg': '-metadata:s:a:0 title='}  # Audio stream title
-            video_stream_language = {'value': None, 'default': None, 'arg': '-metadata:s:v:0 language='}  # Video stream language
-            audio_stream_language = {'value': None, 'default': None, 'arg': '-metadata:s:a:0 language='}  # Audio stream language
-            subtitle_stream_language = {'value': None, 'default': None, 'arg': '-metadata:s:s:0 language='}  # Subtitle stream language
-            media_artist = {'value': None, 'default': None, 'arg': '-metadata artist='}  # Media artist
-            media_year = {'value': None, 'default': None, 'arg': '-metadata year='}  # Media year
-            media_genre = {'value': None, 'default': None, 'arg': '-metadata genre='}  # Media genre
-            media_album = {'value': None, 'default': None, 'arg': '-metadata album='}  # Media album
-            media_album_artist = {'value': None, 'default': None, 'arg': '-metadata album_artist='}  # Media album artist
-            media_comment = {'value': None, 'default': None, 'arg': '-metadata comment='}  # Media comment
-            media_track_number = {'value': None, 'default': None, 'arg': '-metadata track='}  # Media track number
+    class MetadataArguments:  # ---> !!! In this class, for each parameter, the value must be inside the braces "{}", to be replaced by the real value
+        metadata_title = None  # Media title (-metadata title="{}")
+        video_stream_title = None  # Video stream title (-metadata:s:v:0 title="{}")
+        audio_stream_title = None  # Audio stream title (-metadata:s:a:0 title="{}")
+        video_stream_language = None  # Video stream language (-metadata:s:v:0 language="{}")
+        audio_stream_language = None  # Audio stream language (-metadata:s:a:0 language="{}")
+        subtitle_stream_language = None  # Subtitle stream language (-metadata:s:s:0 language="{}")
+        media_artist = None  # Media artist (-metadata artist="{}")
+        media_year = None  # Media year (-metadata year="{}")
+        media_genre = None  # Media genre (-metadata genre="{}")
+        media_album = None  # Media album (-metadata album="{}")
+        media_album_artist = None  # Media album artist (-metadata album_artist="{}")
+        media_comment = None  # Media comment (-metadata comment="{}")
+        media_track_number = None  # Media track number (-metadata track="{}")
 
     class CustomArguments:
-        def __init__(self):
-            custom_args = {'value': None, 'default': None}
+        args = None  # Custom extra FFmpeg arguments
 
 class RunOnFinish:
-        def __init__(self):
-            cmd = {'value': None, 'default': None}  # Custom bash command to run on finish (this will be executed before power action)
-            delay = {'value': None, 'default': 5}  # Delay in seconds before power action and after custom command execution
-            task = {'value': None, 'default': None}  # Power action available tasks: 'shutdown', 'restart', 'hibernate', 'sleep', 'lock'
+    cmd = None  # Custom bash command to run on finish (this will be executed before power action)
+    delay = None  # Delay in seconds before power action and after custom command execution
+    task = None  # Power action available tasks: 'shutdown', 'restart', 'hibernate', 'sleep', 'lock', 'logout'
 
-def main_app(user_args: Namespace):
-    # Initialize UserArgs class
-    user_args = UserArgs(user_args)
-    user_args.check_arguments()
+def app(args: Namespace):
+    # Check command line arguments
+    check_arguments(args)
+
+    # Retrieve media information from the input file
+    media_info = retrieve_media_info(args.input_filepath)
 
     # Initialize other classes
-    media_info_data = MediaInfoData()
     ffmpeg_general_settings = FFmpegGeneralSettings()
     ffmpeg_render_settings = FFmpegRenderSettings()
     run_on_finish = RunOnFinish()
-
-    # Retrieve media information from the input file
-    media_info_data.raw_data = retrieve_media_info(user_args.input_filepath)
 
     # Calculate the best FFmpeg settings
     ffmpeg_general_settings.calculate_best_parameters()
 
     # Generate FFmpeg CLI arguments
     ffmpeg_cli_args = ffmpeg_general_settings.generate_cli_args()
+    print(ffmpeg_cli_args)
+
+    # Calculate the best video settings
+    ffmpeg_cli_args += ffmpeg_render_settings.generate_cli_args()
     print(ffmpeg_cli_args)
 
 
@@ -310,11 +353,11 @@ if __name__ == '__main__':
     parser.add_argument('-i', '--input-filepath', metavar='input_filepath', type=str, help='Input file path')
     parser.add_argument('-o', '--output-filepath', metavar='output_filepath', type=str, help='Output file path')
     parser.add_argument('-c:v', '--video-codec', metavar='video_codec', type=str, help='Codec for video stream')
-    args = parser.parse_args()
+    user_args = parser.parse_args()
 
-    if args.github:
+    if user_args.github:
         open_github_repository()
-    elif args.input_filepath and args.output_filepath:
-        main_app(args)
+    elif user_args.input_filepath and user_args.output_filepath:
+        app(user_args)
     else:
         parser.print_help()
