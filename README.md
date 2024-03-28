@@ -1,9 +1,9 @@
 <p align="center">
-    <a href="https://github.com/Henrique-Coder/transcodash/contributors"><img alt="Contributors" src="https://img.shields.io/github/contributors/Henrique-Coder/everytoolsapi.svg?style=for-the-badge&logo=github"/></a>
-    <a href="https://github.com/Henrique-Coder/transcodash/forks"><img alt="Forks" src="https://img.shields.io/github/forks/Henrique-Coder/everytoolsapi.svg?style=for-the-badge&logo=github"/></a>
-    <a href="https://github.com/Henrique-Coder/transcodash/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/Henrique-Coder/everytoolsapi.svg?style=for-the-badge&logo=github"/></a>
-    <a href="https://github.com/Henrique-Coder/transcodash/issues"><img alt="Issues" src="https://img.shields.io/github/issues/Henrique-Coder/everytoolsapi.svg?&style=for-the-badge&logo=github"/></a>
-    <a href="https://github.com/Henrique-Coder/transcodash/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/Henrique-Coder/everytoolsapi.svg?style=for-the-badge&logo=github"/></a>
+    <a href="https://github.com/Henrique-Coder/transcodash/contributors"><img alt="Contributors" src="https://img.shields.io/github/contributors/Henrique-Coder/transcodash.svg?style=for-the-badge&logo=github"/></a>
+    <a href="https://github.com/Henrique-Coder/transcodash/forks"><img alt="Forks" src="https://img.shields.io/github/forks/Henrique-Coder/transcodash.svg?style=for-the-badge&logo=github"/></a>
+    <a href="https://github.com/Henrique-Coder/transcodash/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/Henrique-Coder/transcodash.svg?style=for-the-badge&logo=github"/></a>
+    <a href="https://github.com/Henrique-Coder/transcodash/issues"><img alt="Issues" src="https://img.shields.io/github/issues/Henrique-Coder/transcodash.svg?&style=for-the-badge&logo=github"/></a>
+    <a href="https://github.com/Henrique-Coder/transcodash/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/Henrique-Coder/transcodash.svg?style=for-the-badge&logo=github"/></a>
     <a href="https://www.linkedin.com/in/henrique-coder"><img alt="LinkedIn" src="https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555"/></a>
 </p>
 
