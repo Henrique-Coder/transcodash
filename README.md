@@ -9,7 +9,7 @@
 
 <div align="center">
   <a href="https://github.com/Henrique-Coder/transcodash">
-    <img src="images/logo/96x96.png" alt="Logo" width="96" height="96">
+    <img src="images/logo/128x128.png" alt="Logo" width="96" height="96">
   </a>
 
   <h3 align="center">Transcodash</h3>
