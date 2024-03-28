@@ -257,6 +257,61 @@ class FFmpegRenderSettings:
             pixel_format = None  # Pixel format: yuv420p [yuv420p, yuv422p, yuv444p, ...] (-pix_fmt)
 
             def calculate_best_parameters(self) -> None:
+                self.codec = 'libsvtav1'
+
+            def generate_cli_args(self) -> list:
+                """
+                Generate FFmpeg CLI arguments based on the best available settings
+                :return: list
+                """
+
+                generated_args = list()
+                append_to_list(generated_args, self.codec, '-c:v')
+
+                return generated_args
+
+        class Filters:
+            tune = None  # Tune: None [animation, film, grain, ...] (-tune)
+            noise_reduction = None  # Noise reduction: None [0.1, 0.2, 0.3, ...] (-noise_reduction)
+            deblock = None  # Deblocking: None [0.1, 0.2, 0.3, ...] (-deblock)
+            sharpness = None  # Sharpness: None [0.1, 0.2, 0.3, ...] (-sharpness)
+            gamma = None  # Gamma: None [0.1, 0.2, 0.3, ...] (-gamma)
+
+            def calculate_best_parameters(self) -> None:
+                pass
+
+            def generate_cli_args(self) -> list:
+                """
+                Generate FFmpeg CLI arguments based on the best available settings
+                :return: list
+                """
+
+                generated_args = list()
+
+                return generated_args
+
+    class AudioSection:
+        def __init__(self):
+            self.arguments = self.Arguments()
+            self.filters = self.Filters()
+
+        def generate_cli_args(self) -> list:
+            """
+            Generate FFmpeg CLI arguments based on the best available settings
+            :return: list
+            """
+
+            generated_args = self.arguments.generate_cli_args()
+            generated_args += self.filters.generate_cli_args()
+
+            return generated_args
+
+        class Arguments:
+            codec = None  # Audio codec: libopus (-c:a)
+            bit_rate = None  # Audio bit rate: 128k [64k, 128k, 256k, ...] (-b:a)
+            sample_rate = None  # Audio sample rate: 48000 [48000, 44100, 22050, ...] (-ar)
+
+            def calculate_best_parameters(self) -> None:
                 pass
 
             def generate_cli_args(self) -> list:
@@ -270,11 +325,8 @@ class FFmpegRenderSettings:
                 return generated_args
 
         class Filters:
-            tune = None  # Tune: None [animation, film, grain, ...] (-tune)
-            noise_reduction = None  # Noise reduction: None [0.1, 0.2, 0.3, ...] (-noise_reduction)
-            deblock = None  # Deblocking: None [0.1, 0.2, 0.3, ...] (-deblock)
-            sharpness = None  # Sharpness: None [0.1, 0.2, 0.3, ...] (-sharpness)
-            gamma = None  # Gamma: None [0.1, 0.2, 0.3, ...] (-gamma)
+            def calculate_best_parameters(self) -> None:
+                pass
 
             def generate_cli_args(self) -> list:
                 """
@@ -286,17 +338,21 @@ class FFmpegRenderSettings:
 
                 return generated_args
 
-    class AudioSection:
-        class Arguments:
-            codec = None  # Audio codec: libopus (-c:a)
-            bit_rate = None  # Audio bit rate: 128k [64k, 128k, 256k, ...] (-b:a)
-            sample_rate = None  # Audio sample rate: 48000 [48000, 44100, 22050, ...] (-ar)
-
-        class Filters:
-            pass
-
     class SubtitleArguments:
         codec = None  # Subtitle codec: webvtt (-c:s)
+
+        def calculate_best_parameters(self) -> None:
+            pass
+
+        def generate_cli_args(self) -> list:
+            """
+            Generate FFmpeg CLI arguments based on the best available settings
+            :return: list
+            """
+
+            generated_args = list()
+
+            return generated_args
 
     class MetadataArguments:  # ---> !!! In this class, for each parameter, the value must be inside the braces "{}", to be replaced by the real value
         metadata_title = None  # Media title (-metadata title="{}")
@@ -313,8 +369,31 @@ class FFmpegRenderSettings:
         media_comment = None  # Media comment (-metadata comment="{}")
         media_track_number = None  # Media track number (-metadata track="{}")
 
+        def calculate_best_parameters(self) -> None:
+            pass
+
+        def generate_cli_args(self) -> list:
+            """
+            Generate FFmpeg CLI arguments based on the best available settings
+            :return: list
+            """
+
+            generated_args = list()
+
+            return generated_args
+
     class CustomArguments:
         args = None  # Custom extra FFmpeg arguments
+
+        def generate_cli_args(self) -> list:
+            """
+            Generate FFmpeg CLI arguments based on the best available settings
+            :return: list
+            """
+
+            generated_args = list()
+
+            return generated_args
 
 class RunOnFinish:
     cmd = None  # Custom bash command to run on finish (this will be executed before power action)
@@ -333,15 +412,20 @@ def app(args: Namespace):
     ffmpeg_render_settings = FFmpegRenderSettings()
     run_on_finish = RunOnFinish()
 
-    # Calculate the best FFmpeg settings
+    # Calculate the best FFmpeg settings and parameters
     ffmpeg_general_settings.calculate_best_parameters()
+    ffmpeg_render_settings.video_section.arguments.calculate_best_parameters()
+    ffmpeg_render_settings.video_section.filters.calculate_best_parameters()
+    ffmpeg_render_settings.audio_section.arguments.calculate_best_parameters()
+    ffmpeg_render_settings.audio_section.filters.calculate_best_parameters()
+    ffmpeg_render_settings.subtitle_arguments.calculate_best_parameters()
+    ffmpeg_render_settings.metadata_arguments.calculate_best_parameters()
 
     # Generate FFmpeg CLI arguments
     ffmpeg_cli_args = ffmpeg_general_settings.generate_cli_args()
-    print(ffmpeg_cli_args)
-
-    # Calculate the best video settings
     ffmpeg_cli_args += ffmpeg_render_settings.generate_cli_args()
+
+    # Print the generated FFmpeg command
     print(ffmpeg_cli_args)
 
 
