@@ -13,7 +13,7 @@ from webbrowser import open_new_tab as open_browser_new_tab
 from pymediainfo import MediaInfo
 
 
-def debug_print_dict_items(class_instance: object) -> None:
+def printdebug_dict_items(class_instance: object) -> None:
     print('\n'.join([f'{key}={value}' for key, value in class_instance.__dict__.items()]))
 
 def exit_app(exit_code: int = None) -> None:
@@ -31,11 +31,11 @@ def open_github_repository() -> None:
 
     open_browser_new_tab(AppInfo.source_code_url)
 
-def append_to_list(raw_list: list, value: Any, prefix: Any, ignore_none_value: bool = False) -> list:
+def append_to_list(raw_list: list, prefix: Any = None, value: Any = None, ignore_if_not_value: bool = False) -> list:
     if isinstance(value, bool):
         return raw_list
 
-    if ignore_none_value and value is None:
+    if ignore_if_not_value and value is None:
         return raw_list
 
     if prefix is not None:
@@ -75,11 +75,6 @@ def retrieve_media_info(path_to_file: Any) -> Union[dict, None]:
         print(f'[error] Failed to retrieve media information from the input file: {path_to_file.as_posix()} - Internal error: {e}')
         exit_app()
 
-class AppInfo:
-    name = 'Transcodash'
-    version = '0.1.0'
-    source_code_url = 'https://github.com/Henrique-Coder/transcodash'
-
 def check_arguments(args: Namespace) -> None:
     _input_filepath = Path(args.input_filepath).resolve()
     _output_filepath = Path(args.output_filepath).resolve()
@@ -102,6 +97,20 @@ def check_arguments(args: Namespace) -> None:
     if args.video_codec not in command_output:
         print(f'[error] Chosen video codec is not available in your local FFmpeg installation: {args.video_codec}')
         exit_app()
+
+def clean_list_items(raw_list: list) -> list:
+    """
+    Clean list items by removing None and empty strings
+    :param raw_list:
+    :return:
+    """
+
+    return [item for item in raw_list if item is not None and item.strip()]
+
+class AppInfo:
+    name = 'Transcodash'
+    version = '0.1.1'
+    source_code_url = 'https://github.com/Henrique-Coder/transcodash'
 
 class FFmpegGeneralSettings:
     ffmpeg_path = None
@@ -193,13 +202,13 @@ class FFmpegGeneralSettings:
         """
 
         generated_args = list()
-        append_to_list(generated_args, self.ffmpeg_path, None)
-        append_to_list(generated_args, self.gpu_acceleration_api, '-hwaccel', True)
-        append_to_list(generated_args, self.gpu_acceleration_device_index, '-hwaccel_device', True)
-        append_to_list(generated_args, self.threads, '-threads', True)
-        if self.overwrite_existing_files: append_to_list(generated_args, None, '-y')
-        if self.hide_banner: append_to_list(generated_args, None, '-hide_banner')
-        if self.show_extra_debug_info: append_to_list(generated_args, None, '-stats')
+        append_to_list(generated_args, value=self.ffmpeg_path)
+        append_to_list(generated_args, prefix='-hwaccel', value=self.gpu_acceleration_api, ignore_if_not_value=True)
+        append_to_list(generated_args, prefix='-hwaccel_device', value=self.gpu_acceleration_device_index, ignore_if_not_value=True)
+        append_to_list(generated_args, prefix='-threads', value=self.threads, ignore_if_not_value=True)
+        append_to_list(generated_args, value='-y' if self.overwrite_existing_files else None)
+        append_to_list(generated_args, value='-hide_banner' if self.hide_banner else None)
+        append_to_list(generated_args, value='-stats' if self.show_extra_debug_info else None)
 
         return generated_args
 
@@ -256,8 +265,14 @@ class FFmpegRenderSettings:
             b_frames = None  # Number of B-frames: 0 [1, 2, 3, ...] (-bf)
             pixel_format = None  # Pixel format: yuv420p [yuv420p, yuv422p, yuv444p, ...] (-pix_fmt)
 
-            def calculate_best_parameters(self) -> None:
-                self.codec = 'libsvtav1'
+            def calculate_best_parameters(self, media_info: dict) -> None:
+                """
+                Calculate the best video parameters based on the input media file information
+                :param media_info:
+                :return: None
+                """
+
+                print(media_info)
 
             def generate_cli_args(self) -> list:
                 """
@@ -266,7 +281,6 @@ class FFmpegRenderSettings:
                 """
 
                 generated_args = list()
-                append_to_list(generated_args, self.codec, '-c:v')
 
                 return generated_args
 
@@ -277,7 +291,7 @@ class FFmpegRenderSettings:
             sharpness = None  # Sharpness: None [0.1, 0.2, 0.3, ...] (-sharpness)
             gamma = None  # Gamma: None [0.1, 0.2, 0.3, ...] (-gamma)
 
-            def calculate_best_parameters(self) -> None:
+            def calculate_best_parameters(self, media_info: dict) -> None:
                 pass
 
             def generate_cli_args(self) -> list:
@@ -311,7 +325,7 @@ class FFmpegRenderSettings:
             bit_rate = None  # Audio bit rate: 128k [64k, 128k, 256k, ...] (-b:a)
             sample_rate = None  # Audio sample rate: 48000 [48000, 44100, 22050, ...] (-ar)
 
-            def calculate_best_parameters(self) -> None:
+            def calculate_best_parameters(self, media_info: dict) -> None:
                 pass
 
             def generate_cli_args(self) -> list:
@@ -325,7 +339,7 @@ class FFmpegRenderSettings:
                 return generated_args
 
         class Filters:
-            def calculate_best_parameters(self) -> None:
+            def calculate_best_parameters(self, media_info: dict) -> None:
                 pass
 
             def generate_cli_args(self) -> list:
@@ -341,7 +355,7 @@ class FFmpegRenderSettings:
     class SubtitleArguments:
         codec = None  # Subtitle codec: webvtt (-c:s)
 
-        def calculate_best_parameters(self) -> None:
+        def calculate_best_parameters(self, media_info: dict) -> None:
             pass
 
         def generate_cli_args(self) -> list:
@@ -369,7 +383,7 @@ class FFmpegRenderSettings:
         media_comment = None  # Media comment (-metadata comment="{}")
         media_track_number = None  # Media track number (-metadata track="{}")
 
-        def calculate_best_parameters(self) -> None:
+        def calculate_best_parameters(self, media_info: dict) -> None:
             pass
 
         def generate_cli_args(self) -> list:
@@ -396,7 +410,7 @@ class FFmpegRenderSettings:
             return generated_args
 
 class RunOnFinish:
-    cmd = None  # Custom bash command to run on finish (this will be executed before power action)
+    cmd = None  # Custom bash (depends on your OS) command to run on finish (this will be executed before power action)
     delay = None  # Delay in seconds before power action and after custom command execution
     task = None  # Power action available tasks: 'shutdown', 'restart', 'hibernate', 'sleep', 'lock', 'logout'
 
@@ -414,19 +428,21 @@ def app(args: Namespace):
 
     # Calculate the best FFmpeg settings and parameters
     ffmpeg_general_settings.calculate_best_parameters()
-    ffmpeg_render_settings.video_section.arguments.calculate_best_parameters()
-    ffmpeg_render_settings.video_section.filters.calculate_best_parameters()
-    ffmpeg_render_settings.audio_section.arguments.calculate_best_parameters()
-    ffmpeg_render_settings.audio_section.filters.calculate_best_parameters()
-    ffmpeg_render_settings.subtitle_arguments.calculate_best_parameters()
-    ffmpeg_render_settings.metadata_arguments.calculate_best_parameters()
+    ffmpeg_render_settings.video_section.arguments.calculate_best_parameters(media_info)
+    ffmpeg_render_settings.video_section.filters.calculate_best_parameters(media_info)
+    ffmpeg_render_settings.audio_section.arguments.calculate_best_parameters(media_info)
+    ffmpeg_render_settings.audio_section.filters.calculate_best_parameters(media_info)
+    ffmpeg_render_settings.subtitle_arguments.calculate_best_parameters(media_info)
+    ffmpeg_render_settings.metadata_arguments.calculate_best_parameters(media_info)
 
     # Generate FFmpeg CLI arguments
     ffmpeg_cli_args = ffmpeg_general_settings.generate_cli_args()
     ffmpeg_cli_args += ffmpeg_render_settings.generate_cli_args()
+    clean_ffmpeg_cli_args = clean_list_items(ffmpeg_cli_args)
 
     # Print the generated FFmpeg command
-    print(ffmpeg_cli_args)
+    printdebug_dict_items(ffmpeg_general_settings)
+    print(clean_ffmpeg_cli_args)
 
 
 if __name__ == '__main__':
