@@ -1,7 +1,3 @@
-import os
-import sys
-import time
-import string
 from sys import exit
 from os import cpu_count
 from shutil import which
@@ -13,13 +9,19 @@ from webbrowser import open_new_tab as open_browser_new_tab
 from pymediainfo import MediaInfo
 
 
-def printdebug_dict_items(class_instance: object) -> None:
+def printdebug_class_items(class_instance: object) -> None:
+    """
+    [debug] Print all key-value pairs from a class instance
+    :param class_instance: Class instance
+    :return:
+    """
+
     print('\n'.join([f'{key}={value}' for key, value in class_instance.__dict__.items()]))
 
 def exit_app(exit_code: int = None) -> None:
     """
-    Exit the application with a specific exit code
-    :param exit_code:
+    Exit the application with an optional exit code
+    :param exit_code: Exit code number
     """
 
     exit(exit_code)
@@ -32,6 +34,15 @@ def open_github_repository() -> None:
     open_browser_new_tab(AppInfo.source_code_url)
 
 def append_to_list(raw_list: list, prefix: Any = None, value: Any = None, ignore_if_not_value: bool = False) -> list:
+    """
+    Append a prefix and a value to a list if the value is not None
+    :param raw_list: Source list
+    :param prefix: Prefix to append before the value
+    :param value: Value to append after the prefix
+    :param ignore_if_not_value: Ignore the value if it is None
+    :return: Updated list
+    """
+
     if isinstance(value, bool):
         return raw_list
 
@@ -47,9 +58,9 @@ def append_to_list(raw_list: list, prefix: Any = None, value: Any = None, ignore
 
 def retrieve_media_info(path_to_file: Any) -> Union[dict, None]:
     """
-    Retrieve media information from a file using pymediainfo library
-    :param path_to_file:
-    :return: dict
+    Retrieve media information from the input file
+    :param path_to_file: Path to the input file
+    :return: Media information dictionary or None
     """
 
     try:
@@ -75,41 +86,73 @@ def retrieve_media_info(path_to_file: Any) -> Union[dict, None]:
         print(f'[error] Failed to retrieve media information from the input file: {path_to_file.as_posix()} - Internal error: {e}')
         exit_app()
 
-def check_arguments(args: Namespace) -> None:
-    _input_filepath = Path(args.input_filepath).resolve()
-    _output_filepath = Path(args.output_filepath).resolve()
+def validate_arguments(args: Namespace) -> Namespace:
+    """
+    Check command line arguments, validate them, and return the updated arguments
+    :param args: Command line arguments
+    """
 
-    if not Path(args.input_filepath).is_file() or not Path(args.input_filepath).exists():
-        print(f'[error] Input file path argument is invalid: {_input_filepath.as_posix()}')
+    # Checking required arguments
+    input_filepath = Path(args.input_filepath).resolve()
+
+    if not input_filepath.is_file():
+        print(f'[error] Input file path argument is invalid: {input_filepath.as_posix()}')
         exit_app()
 
-    args.input_filepath = _input_filepath.as_posix()
-    args.output_filepath = _output_filepath.as_posix()
+    output_filepath = Path(args.output_filepath).resolve()
 
-    command_output = None
-
-    try:
-        command_output = check_output(['ffmpeg', '-codecs'], stderr=STDOUT).decode()
-    except CalledProcessError as e:
-        print(f'[error] Failed to check available FFmpeg codecs: {e} - Internal error: {e.output.decode()}')
+    if input_filepath == output_filepath:
+        print(f'[error] Output file path cannot be the same as input file path: {output_filepath.as_posix()}')
         exit_app()
 
-    if args.video_codec not in command_output:
-        print(f'[error] Chosen video codec is not available in your local FFmpeg installation: {args.video_codec}')
+    args.input_filepath = input_filepath.as_posix()
+
+    if output_filepath.is_dir() or (output_filepath.parent == input_filepath.parent and output_filepath.exists() and not output_filepath.is_file()):
+        print(f'[error] Output file path argument is invalid: {output_filepath.as_posix()}')
         exit_app()
+
+    args.output_filepath = output_filepath.as_posix()
+
+    # Checking optional arguments
+    if not args.video_codec or not str(args.video_codec).strip(): args.video_codec = 'copy'
+    elif not args.audio_codec or not str(args.audio_codec).strip(): args.audio_codec = 'copy'
+    elif not args.subtitle_codec or not str(args.subtitle_codec).strip(): args.subtitle_codec = 'copy'
+
+    # so rodar caso algum codec não seja copy
+    if args.video_codec != 'copy' or args.audio_codec != 'copy' or args.subtitle_codec != 'copy':
+        command_output = None
+
+        try:
+            command_output = check_output(['ffmpeg', '-codecs'], stderr=STDOUT).decode()
+        except CalledProcessError as e:
+            print(f'[error] Failed to check available FFmpeg codecs: {e} - Internal error: {e.output.decode()}')
+            exit_app()
+
+        if args.video_codec != 'copy' and args.video_codec not in command_output:
+            print(f'[error] Chosen video codec is not available in your local FFmpeg installation: {args.video_codec}')
+            exit_app()
+        elif args.audio_codec != 'copy' and args.audio_codec not in command_output:
+            print(f'[error] Chosen audio codec is not available in your local FFmpeg installation: {args.audio_codec}')
+            exit_app()
+        elif args.subtitle_codec != 'copy' and args.subtitle_codec not in command_output:
+            print(f'[error] Chosen subtitle codec is not available in your local FFmpeg installation: {args.subtitle_codec}')
+            exit_app()
+
+    return args
 
 def clean_list_items(raw_list: list) -> list:
     """
-    Clean list items by removing None and empty strings
-    :param raw_list:
-    :return:
+    Clean a list by removing None, empty, and whitespace items
+    :param raw_list: Source list
+    :return: Cleaned list
     """
 
     return [item for item in raw_list if item is not None and item.strip()]
 
 class AppInfo:
     name = 'Transcodash'
-    version = '0.1.1'
+    description = f'{name} is a smart CLI tool for optimal media transcoding. It analyzes your computer and the input media files, generating and executing an optimal FFmpeg command for efficient conversion with no visible loss of quality.'
+    version = '0.0.1'
     source_code_url = 'https://github.com/Henrique-Coder/transcodash'
 
 class FFmpegGeneralSettings:
@@ -122,6 +165,10 @@ class FFmpegGeneralSettings:
     show_extra_debug_info = None
 
     def calculate_best_parameters(self) -> None:
+        """
+        Calculate the best FFmpeg settings based on the available system resources
+        """
+
         def set_ffmpeg_path() -> None:
             """
             Set absolute path to FFmpeg binary file if available
@@ -198,7 +245,7 @@ class FFmpegGeneralSettings:
     def generate_cli_args(self) -> list:
         """
         Generate FFmpeg CLI arguments based on the best available settings
-        :return: list
+        :return: Updated list
         """
 
         generated_args = list()
@@ -223,7 +270,7 @@ class FFmpegRenderSettings:
     def generate_cli_args(self) -> list:
         """
         Generate FFmpeg CLI arguments based on the best available settings
-        :return: list
+        :return: Updated list
         """
 
         generated_args = self.video_section.generate_cli_args()
@@ -231,17 +278,22 @@ class FFmpegRenderSettings:
         generated_args += self.subtitle_arguments.generate_cli_args()
         generated_args += self.metadata_arguments.generate_cli_args()
         generated_args += self.custom_arguments.generate_cli_args()
+
         return generated_args
 
     class VideoSection:
         def __init__(self):
+            """
+            Initialize the video section with the best available settings
+            """
+
             self.arguments = self.Arguments()
             self.filters = self.Filters()
 
         def generate_cli_args(self) -> list:
             """
             Generate FFmpeg CLI arguments based on the best available settings
-            :return: list
+            :return: Updated list
             """
 
             generated_args = self.arguments.generate_cli_args()
@@ -265,19 +317,26 @@ class FFmpegRenderSettings:
             b_frames = None  # Number of B-frames: 0 [1, 2, 3, ...] (-bf)
             pixel_format = None  # Pixel format: yuv420p [yuv420p, yuv422p, yuv444p, ...] (-pix_fmt)
 
-            def calculate_best_parameters(self, media_info: dict) -> None:
+            def calculate_best_parameters(self, media_info: 'MediaInfoData') -> None:
                 """
-                Calculate the best video parameters based on the input media file information
-                :param media_info:
-                :return: None
+                Calculate the best video parameters based on the input media file
+                :param media_info: MediaInfoData object
                 """
 
-                print(media_info)
+                def set_video_codec() -> None:
+                    """
+                    Set the best video codec based on the input media file
+                    """
+
+                    pass
+
+                # Run all video settings calculations
+                set_video_codec()
 
             def generate_cli_args(self) -> list:
                 """
                 Generate FFmpeg CLI arguments based on the best available settings
-                :return: list
+                :return: Updated list
                 """
 
                 generated_args = list()
@@ -291,13 +350,18 @@ class FFmpegRenderSettings:
             sharpness = None  # Sharpness: None [0.1, 0.2, 0.3, ...] (-sharpness)
             gamma = None  # Gamma: None [0.1, 0.2, 0.3, ...] (-gamma)
 
-            def calculate_best_parameters(self, media_info: dict) -> None:
+            def calculate_best_parameters(self, media_info: 'MediaInfoData') -> None:
+                """
+                Calculate the best video filters based on the input media file
+                :param media_info: MediaInfoData object
+                """
+
                 pass
 
             def generate_cli_args(self) -> list:
                 """
                 Generate FFmpeg CLI arguments based on the best available settings
-                :return: list
+                :return: Updated list
                 """
 
                 generated_args = list()
@@ -306,13 +370,17 @@ class FFmpegRenderSettings:
 
     class AudioSection:
         def __init__(self):
+            """
+            Initialize the audio section with the best available settings
+            """
+
             self.arguments = self.Arguments()
             self.filters = self.Filters()
 
         def generate_cli_args(self) -> list:
             """
             Generate FFmpeg CLI arguments based on the best available settings
-            :return: list
+            :return: Updated list
             """
 
             generated_args = self.arguments.generate_cli_args()
@@ -325,13 +393,26 @@ class FFmpegRenderSettings:
             bit_rate = None  # Audio bit rate: 128k [64k, 128k, 256k, ...] (-b:a)
             sample_rate = None  # Audio sample rate: 48000 [48000, 44100, 22050, ...] (-ar)
 
-            def calculate_best_parameters(self, media_info: dict) -> None:
-                pass
+            def calculate_best_parameters(self, media_info: 'MediaInfoData') -> None:
+                """
+                Calculate the best audio parameters based on the input media file
+                :param media_info: MediaInfoData object
+                """
+
+                def set_audio_codec() -> None:
+                    """
+                    Set the best audio codec based on the input media file
+                    """
+
+                    pass
+
+                # Run all audio settings calculations
+                set_audio_codec()
 
             def generate_cli_args(self) -> list:
                 """
                 Generate FFmpeg CLI arguments based on the best available settings
-                :return: list
+                :return: Updated list
                 """
 
                 generated_args = list()
@@ -339,13 +420,18 @@ class FFmpegRenderSettings:
                 return generated_args
 
         class Filters:
-            def calculate_best_parameters(self, media_info: dict) -> None:
+            def calculate_best_parameters(self, media_info: 'MediaInfoData') -> None:
+                """
+                Calculate the best audio filters based on the input media file
+                :param media_info: MediaInfoData object
+                """
+
                 pass
 
             def generate_cli_args(self) -> list:
                 """
                 Generate FFmpeg CLI arguments based on the best available settings
-                :return: list
+                :return: Updated list
                 """
 
                 generated_args = list()
@@ -355,13 +441,26 @@ class FFmpegRenderSettings:
     class SubtitleArguments:
         codec = None  # Subtitle codec: webvtt (-c:s)
 
-        def calculate_best_parameters(self, media_info: dict) -> None:
-            pass
+        def calculate_best_parameters(self, media_info: 'MediaInfoData') -> None:
+            """
+            Calculate the best subtitle parameters based on the input media file
+            :param media_info: MediaInfoData object
+            """
+
+            def set_subtitle_codec() -> None:
+                """
+                Set the best subtitle codec based on the input media file
+                """
+
+                pass
+
+            # Run all subtitle settings calculations
+            set_subtitle_codec()
 
         def generate_cli_args(self) -> list:
             """
             Generate FFmpeg CLI arguments based on the best available settings
-            :return: list
+            :return: Updated list
             """
 
             generated_args = list()
@@ -383,13 +482,18 @@ class FFmpegRenderSettings:
         media_comment = None  # Media comment (-metadata comment="{}")
         media_track_number = None  # Media track number (-metadata track="{}")
 
-        def calculate_best_parameters(self, media_info: dict) -> None:
+        def calculate_best_parameters(self, media_info: 'MediaInfoData') -> None:
+            """
+            Calculate the best metadata parameters based on the input media file
+            :param media_info: MediaInfoData object
+            """
+
             pass
 
         def generate_cli_args(self) -> list:
             """
             Generate FFmpeg CLI arguments based on the best available settings
-            :return: list
+            :return: Updated list
             """
 
             generated_args = list()
@@ -401,8 +505,8 @@ class FFmpegRenderSettings:
 
         def generate_cli_args(self) -> list:
             """
-            Generate FFmpeg CLI arguments based on the best available settings
-            :return: list
+            Generate FFmpeg CLI arguments based on the user-defined settings
+            :return: Updated list
             """
 
             generated_args = list()
@@ -414,14 +518,85 @@ class RunOnFinish:
     delay = None  # Delay in seconds before power action and after custom command execution
     task = None  # Power action available tasks: 'shutdown', 'restart', 'hibernate', 'sleep', 'lock', 'logout'
 
-def app(args: Namespace):
-    # Check command line arguments
-    check_arguments(args)
+class MediaInfoData:
+    def __init__(self, data: dict) -> None:
+        """
+        Initialize the MediaInfoData object with the raw data
+        :param data: Raw media information data
+        """
+
+        self._data = data
+
+    def __getattr__(self, attr: str) -> Union[Any, 'MediaInfoData', None]:
+        """
+        Get the value of an attribute from the raw data
+        :param attr: Attribute name
+        :return: Attribute value or None
+        """
+
+        if attr.startswith('_'):
+            return self.__dict__.get(attr)
+
+        value = self._data.get(attr)
+
+        if value is not None:
+            if isinstance(value, list):
+                if len(value) == 1:
+                    return self._wrap_value(value[0])
+
+                return [self._wrap_value(item) for item in value]
+
+            elif isinstance(value, dict):
+                return self._wrap_value(value)
+
+            return value
+
+        return None
+
+    def __getitem__(self, item: str) -> Any:
+        """
+        Get the value of an item from the raw data
+        :param item: Item name
+        :return: Item value
+        """
+
+        return self._data.get(item)
+
+    def __repr__(self) -> str:
+        """
+        Return the raw data representation
+        :return: Raw data representation
+        """
+
+        return repr(self._data)
+
+    @staticmethod
+    def _wrap_value(value: Any) -> Union[Any, 'MediaInfoData']:
+        """
+        Wrap a value in a MediaInfoData object if it is a dictionary
+        :param value: Value to wrap
+        :return: Wrapped value
+        """
+
+        if isinstance(value, dict):
+            return MediaInfoData(value)
+
+        return value
+
+def app(args: Namespace) -> None:
+    """
+    Main application function
+    :param args: Parsed command line arguments
+    """
+
+    # Validate command line arguments
+    args = validate_arguments(args)
 
     # Retrieve media information from the input file
-    media_info = retrieve_media_info(args.input_filepath)
+    media_info_raw_data = retrieve_media_info(args.input_filepath)
+    media_info = MediaInfoData(media_info_raw_data)
 
-    # Initialize other classes
+    # Initialize FFmpeg settings, parameters, and run-on-finish tasks objects
     ffmpeg_general_settings = FFmpegGeneralSettings()
     ffmpeg_render_settings = FFmpegRenderSettings()
     run_on_finish = RunOnFinish()
@@ -438,26 +613,25 @@ def app(args: Namespace):
     # Generate FFmpeg CLI arguments
     ffmpeg_cli_args = ffmpeg_general_settings.generate_cli_args()
     ffmpeg_cli_args += ffmpeg_render_settings.generate_cli_args()
+    ffmpeg_cli_args.insert(1, '-i')
+    ffmpeg_cli_args.insert(2, args.input_filepath)
+    ffmpeg_cli_args.append(args.output_filepath)
     clean_ffmpeg_cli_args = clean_list_items(ffmpeg_cli_args)
 
     # Print the generated FFmpeg command
-    printdebug_dict_items(ffmpeg_general_settings)
+    print(args.__dict__)
+    printdebug_class_items(ffmpeg_general_settings)
     print(clean_ffmpeg_cli_args)
 
 
 if __name__ == '__main__':
     # Parse command line arguments and run the main application
-    parser = ArgumentParser(description=f"{AppInfo.name} is a smart CLI tool for optimal media transcoding. It analyzes your computer and the input media files, generating and executing an optimal FFmpeg command for efficient conversion with no visible loss of quality.")
+    parser = ArgumentParser(description=AppInfo.description)
     parser.add_argument('-v', '--version', action='version', version=f'{AppInfo.name} {AppInfo.version}')
-    parser.add_argument('-gh', '--github', action='store_true', help=f'Open {AppInfo.name} GitHub repository in your default web browser')
-    parser.add_argument('-i', '--input-filepath', metavar='input_filepath', type=str, help='Input file path')
-    parser.add_argument('-o', '--output-filepath', metavar='output_filepath', type=str, help='Output file path')
-    parser.add_argument('-c:v', '--video-codec', metavar='video_codec', type=str, help='Codec for video stream')
-    user_args = parser.parse_args()
+    parser.add_argument('-i', '--input-filepath',   metavar='input_filepath',  type=str, help='Input file path',           required=True)
+    parser.add_argument('-o', '--output-filepath',  metavar='output_filepath', type=str, help='Output file path',          required=True)
+    parser.add_argument('-c:v', '--video-codec',    metavar='video_codec',     type=str, help='Codec for video stream',    default='copy')
+    parser.add_argument('-c:a', '--audio-codec',    metavar='audio_codec',     type=str, help='Codec for audio stream',    default='copy')
+    parser.add_argument('-c:s', '--subtitle-codec', metavar='subtitle_codec',  type=str, help='Codec for subtitle stream', default='copy')
 
-    if user_args.github:
-        open_github_repository()
-    elif user_args.input_filepath and user_args.output_filepath:
-        app(user_args)
-    else:
-        parser.print_help()
+    app(parser.parse_args())  # CLI Command (example): py transcodash.py -i "inputs/video30.mkv" -o "inputs/video30-transcodashed.mp4" -c:v libsvtav1 -c:a libopus -c:s webvtt
